@@ -13,21 +13,31 @@ use tower_http::cors::CorsLayer;
 use crate::db::operations::BlockRepository;
 use crate::db::address_analytics::AddressAnalyticsRepository;
 use crate::graphql::schema::{create_schema, TaikoSchema};
+use crate::websocket::{websocket_handler, WebSocketBroadcaster};
+use std::sync::Arc;
 
-pub fn create_router(block_repo: BlockRepository, analytics_repo: AddressAnalyticsRepository) -> Router {
+pub fn create_router(
+    block_repo: BlockRepository, 
+    analytics_repo: AddressAnalyticsRepository,
+    websocket_broadcaster: Arc<WebSocketBroadcaster>
+) -> Router {
     let schema = create_schema(block_repo.clone(), analytics_repo.clone());
 
     Router::new()
         .route("/", get(graphql_playground))
         .route("/graphql", post(graphql_handler))
+        .route("/ws", get(websocket_handler))
         .route("/health", get(health_check))
         .route("/api/stats", get(api_stats))
         .route("/api/block/{number}", get(api_block))
         .route("/api/transaction/{hash}", get(api_transaction))
         .route("/api/transactions", get(api_transactions))
+        .route("/api/address/{address}", get(api_address_profile))
         .route("/api/address/{address}/transactions", get(api_address_transactions))
         .layer(Extension(schema))
         .layer(Extension(block_repo))
+        .layer(Extension(analytics_repo))
+        .layer(Extension(websocket_broadcaster))
         .layer(CorsLayer::permissive())
 }
 
@@ -186,6 +196,32 @@ async fn api_address_transactions(
                 "offset": offset
             })))
         },
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    }
+}
+
+async fn api_address_profile(
+    axum::extract::Path(address): axum::extract::Path<String>,
+    Extension(block_repo): Extension<BlockRepository>,
+) -> Result<impl IntoResponse, StatusCode> {
+    match block_repo.get_address_profile(&address) {
+        Ok(profile) => Ok(Json(json!({
+            "address": profile.address,
+            "total_transactions": profile.total_transactions,
+            "first_activity": profile.first_activity.map(|a| json!({
+                "block_number": a.block_number,
+                "transaction_hash": a.transaction_hash
+            })),
+            "last_activity": profile.last_activity.map(|a| json!({
+                "block_number": a.block_number,
+                "transaction_hash": a.transaction_hash
+            })),
+            "total_sent": profile.total_sent.to_string(),
+            "total_received": profile.total_received.to_string(),
+            "total_gas_fees": profile.total_gas_fees.to_string(),
+            "total_volume": (&profile.total_sent + &profile.total_received).to_string(),
+            "net_balance": (&profile.total_received - &profile.total_sent).to_string()
+        }))),
         Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
 }

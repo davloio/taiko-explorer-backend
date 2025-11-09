@@ -2,40 +2,9 @@ use async_graphql::*;
 use std::sync::Arc;
 
 use crate::db::address_analytics::AddressAnalyticsRepository;
-use crate::models::address_analytics::{AddressLabel, AddressStats, AddressBalance};
+use crate::db::operations::{AddressProfile, ActivityInfo};
+use crate::models::address_analytics::AddressStats;
 use crate::models::bridge::{BridgeTransaction, BridgeStats};
-
-#[derive(SimpleObject)]
-#[graphql(complex)]
-pub struct AddressLabelGQL {
-    pub id: i32,
-    pub address: String,
-    pub label: String,
-    pub category: String,
-    pub description: Option<String>,
-    pub verified: Option<bool>,
-}
-
-#[ComplexObject]
-impl AddressLabelGQL {
-    async fn created_at_iso(&self) -> Option<String> {
-        // Would need to add created_at field to the struct
-        None
-    }
-}
-
-impl From<AddressLabel> for AddressLabelGQL {
-    fn from(label: AddressLabel) -> Self {
-        Self {
-            id: label.id,
-            address: label.address,
-            label: label.label,
-            category: label.category,
-            description: label.description,
-            verified: label.verified,
-        }
-    }
-}
 
 #[derive(SimpleObject)]
 #[graphql(complex)]
@@ -50,18 +19,26 @@ pub struct AddressStatsGQL {
     pub gas_used: Option<i64>,
     pub unique_counterparties: Option<i32>,
     pub contract_deployments: Option<i32>,
+    pub total_volume_sent: Option<String>,
+    pub total_volume_received: Option<String>,
 }
 
 #[ComplexObject]
 impl AddressStatsGQL {
-    async fn total_volume_in_eth(&self, ctx: &Context<'_>) -> Result<f64> {
-        // This would require access to the actual AddressStats model
-        // For now, return 0.0 as placeholder
-        Ok(0.0)
+    async fn total_volume_in_eth(&self) -> Result<f64> {
+        let sent_vol = self.total_volume_sent.as_ref()
+            .map(|v| v.parse::<f64>().unwrap_or(0.0))
+            .unwrap_or(0.0);
+        
+        let received_vol = self.total_volume_received.as_ref()
+            .map(|v| v.parse::<f64>().unwrap_or(0.0))
+            .unwrap_or(0.0);
+        
+        Ok((sent_vol + received_vol) / 1e18)
     }
 
     async fn gas_fees_in_eth(&self) -> f64 {
-        // Placeholder - would need gas_fees_paid field
+        // TODO: Calculate from actual gas fees data
         0.0
     }
 
@@ -71,16 +48,6 @@ impl AddressStatsGQL {
         let deployments = self.contract_deployments.unwrap_or(0) as f64 * 10.0;
         
         txs + counterparties + deployments
-    }
-
-    async fn label(&self, ctx: &Context<'_>) -> Result<Option<AddressLabelGQL>> {
-        let repo = ctx.data::<Arc<AddressAnalyticsRepository>>()?;
-        
-        match repo.get_address_label(&self.address) {
-            Ok(Some(label)) => Ok(Some(label.into())),
-            Ok(None) => Ok(None),
-            Err(e) => Err(Error::new(format!("Database error: {}", e))),
-        }
     }
 }
 
@@ -97,31 +64,8 @@ impl From<AddressStats> for AddressStatsGQL {
             gas_used: stats.gas_used,
             unique_counterparties: stats.unique_counterparties,
             contract_deployments: stats.contract_deployments,
-        }
-    }
-}
-
-#[derive(SimpleObject)]
-pub struct AddressBalanceGQL {
-    pub id: i32,
-    pub address: String,
-    pub balance_wei: String,
-    pub balance_eth: f64,
-    pub block_number: i64,
-    pub timestamp: String,
-}
-
-impl From<AddressBalance> for AddressBalanceGQL {
-    fn from(balance: AddressBalance) -> Self {
-        let balance_eth = balance.balance.to_string().parse::<f64>().unwrap_or(0.0) / 1e18;
-        
-        Self {
-            id: balance.id,
-            address: balance.address,
-            balance_wei: balance.balance.to_string(),
-            balance_eth,
-            block_number: balance.block_number,
-            timestamp: balance.timestamp.format("%Y-%m-%dT%H:%M:%SZ").to_string(),
+            total_volume_sent: stats.total_volume_sent.map(|v| v.to_string()),
+            total_volume_received: stats.total_volume_received.map(|v| v.to_string()),
         }
     }
 }
@@ -152,7 +96,6 @@ impl BridgeTransactionGQL {
     }
 
     async fn timestamp_iso(&self) -> String {
-        // Would need to add timestamp field
         "".to_string()
     }
 
@@ -235,8 +178,6 @@ impl From<BridgeStats> for BridgeStatsGQL {
 pub struct AddressAnalytics {
     pub top_addresses_by_volume: Vec<AddressStatsGQL>,
     pub top_addresses_by_activity: Vec<AddressStatsGQL>,
-    pub dex_addresses: Vec<AddressLabelGQL>,
-    pub bridge_addresses: Vec<AddressLabelGQL>,
 }
 
 #[derive(SimpleObject)]
@@ -245,4 +186,51 @@ pub struct BridgeAnalytics {
     pub daily_bridge_stats: Vec<BridgeStatsGQL>,
     pub total_tvl_eth: f64,
     pub bridge_volume_24h_eth: f64,
+}
+
+#[derive(SimpleObject)]
+pub struct ActivityInfoGQL {
+    pub block_number: i64,
+    pub transaction_hash: String,
+}
+
+impl From<ActivityInfo> for ActivityInfoGQL {
+    fn from(activity: ActivityInfo) -> Self {
+        Self {
+            block_number: activity.block_number,
+            transaction_hash: activity.transaction_hash,
+        }
+    }
+}
+
+#[derive(SimpleObject)]
+pub struct AddressProfileGQL {
+    pub address: String,
+    pub total_transactions: i64,
+    pub first_activity: Option<ActivityInfoGQL>,
+    pub last_activity: Option<ActivityInfoGQL>,
+    pub total_sent: String,
+    pub total_received: String,
+    pub total_gas_fees: String,
+    pub total_volume: String,
+    pub net_balance: String,
+}
+
+impl From<AddressProfile> for AddressProfileGQL {
+    fn from(profile: AddressProfile) -> Self {
+        let total_volume = &profile.total_sent + &profile.total_received;
+        let net_balance = &profile.total_received - &profile.total_sent;
+        
+        Self {
+            address: profile.address,
+            total_transactions: profile.total_transactions,
+            first_activity: profile.first_activity.map(|a| a.into()),
+            last_activity: profile.last_activity.map(|a| a.into()),
+            total_sent: profile.total_sent.to_string(),
+            total_received: profile.total_received.to_string(),
+            total_gas_fees: profile.total_gas_fees.to_string(),
+            total_volume: total_volume.to_string(),
+            net_balance: net_balance.to_string(),
+        }
+    }
 }
