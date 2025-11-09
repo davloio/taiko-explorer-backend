@@ -1,34 +1,6 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
-    address_balances (id) {
-        id -> Int4,
-        #[max_length = 42]
-        address -> Varchar,
-        balance -> Numeric,
-        block_number -> Int8,
-        timestamp -> Timestamptz,
-        created_at -> Nullable<Timestamptz>,
-    }
-}
-
-diesel::table! {
-    address_labels (id) {
-        id -> Int4,
-        #[max_length = 42]
-        address -> Varchar,
-        #[max_length = 100]
-        label -> Varchar,
-        #[max_length = 50]
-        category -> Varchar,
-        description -> Nullable<Text>,
-        verified -> Nullable<Bool>,
-        created_at -> Nullable<Timestamptz>,
-        updated_at -> Nullable<Timestamptz>,
-    }
-}
-
-diesel::table! {
     address_stats (id) {
         id -> Int4,
         #[max_length = 42]
@@ -162,12 +134,12 @@ diesel::table! {
         access_list -> Nullable<Text>,
         created_at -> Nullable<Timestamptz>,
         updated_at -> Nullable<Timestamptz>,
+        #[max_length = 10]
+        direction -> Varchar,
     }
 }
 
 diesel::allow_tables_to_appear_in_same_query!(
-    address_balances,
-    address_labels,
     address_stats,
     blocks,
     bridge_stats,
