@@ -7,6 +7,7 @@ mod indexer;
 mod models;
 mod rpc;
 mod schema;
+mod websocket;
 
 mod analytics {
     pub mod analytics;
@@ -24,6 +25,8 @@ use crate::db::operations::BlockRepository;
 use crate::db::address_analytics::AddressAnalyticsRepository;
 use crate::indexer::BlockIndexer;
 use crate::rpc::client::TaikoRpcClient;
+use crate::websocket::WebSocketBroadcaster;
+use std::sync::Arc;
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
 
@@ -44,13 +47,20 @@ async fn main() -> Result<()> {
     let rpc_client = TaikoRpcClient::new(&config.taiko_rpc_url, config.taiko_chain_id).await?;
     let block_repo = BlockRepository::new(pool.clone());
     let analytics_repo = AddressAnalyticsRepository::new(pool);
+    let websocket_broadcaster = Arc::new(WebSocketBroadcaster::new());
     
-    let indexer = BlockIndexer::new(rpc_client, block_repo.clone(), analytics_repo.clone(), config.batch_size);
+    let indexer = BlockIndexer::new(
+        rpc_client, 
+        block_repo.clone(), 
+        analytics_repo.clone(), 
+        websocket_broadcaster.clone(),
+        config.batch_size
+    );
     
     let status = indexer.get_indexer_status().await?;
     info!("Indexer status: {:?}", status);
     
-    let app = create_router(block_repo, analytics_repo);
+    let app = create_router(block_repo, analytics_repo, websocket_broadcaster.clone());
     
     let indexer_handle = tokio::spawn(async move {
         if let Err(e) = indexer.start_indexing().await {
