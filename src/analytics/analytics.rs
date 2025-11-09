@@ -6,7 +6,7 @@ use tracing::{info, warn};
 
 use crate::db::address_analytics::AddressAnalyticsRepository;
 use crate::bridge::BridgeDetector;
-use crate::models::address_analytics::{NewAddressStats, NewAddressLabel};
+use crate::models::address_analytics::NewAddressStats;
 use crate::models::bridge::NewBridgeTransaction;
 
 /// Processes analytics for a block's transactions
@@ -207,36 +207,3 @@ fn update_address_stats(
     }
 }
 
-/// Auto-label known addresses
-pub fn auto_label_addresses(analytics_repo: &AddressAnalyticsRepository) -> Result<()> {
-    // Label known Taiko contracts
-    let known_addresses = vec![
-        NewAddressLabel {
-            address: "0x1670000000000000000000000000000000000001".to_string(),
-            label: "Taiko Bridge".to_string(),
-            category: "Bridge".to_string(),
-            description: Some("Official Taiko L2 Bridge Contract".to_string()),
-            verified: Some(true),
-        },
-        NewAddressLabel {
-            address: "0x1670000000000000000000000000000000010001".to_string(),
-            label: "Taiko Signal Service".to_string(),
-            category: "Bridge".to_string(),
-            description: Some("Taiko L2 Signal Service Contract".to_string()),
-            verified: Some(true),
-        },
-        NewAddressLabel {
-            address: "0x000000633b68f5d8d3a86593ebb815b4663bcbe0".to_string(),
-            label: "Taiko Sequencer".to_string(),
-            category: "Validator".to_string(),
-            description: Some("Main Taiko Block Sequencer".to_string()),
-            verified: Some(true),
-        },
-    ];
-    
-    for label in known_addresses {
-        let _ = analytics_repo.insert_address_label(label);
-    }
-    
-    Ok(())
-}

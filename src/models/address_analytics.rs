@@ -3,50 +3,8 @@ use chrono::{DateTime, NaiveDate, Utc};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::schema::{address_balances, address_labels, address_stats};
+use crate::schema::address_stats;
 
-#[derive(Debug, Clone, Queryable, Selectable, Serialize, Deserialize)]
-#[diesel(table_name = address_labels)]
-pub struct AddressLabel {
-    pub id: i32,
-    pub address: String,
-    pub label: String,
-    pub category: String,
-    pub description: Option<String>,
-    pub verified: Option<bool>,
-    pub created_at: Option<DateTime<Utc>>,
-    pub updated_at: Option<DateTime<Utc>>,
-}
-
-#[derive(Debug, Insertable)]
-#[diesel(table_name = address_labels)]
-pub struct NewAddressLabel {
-    pub address: String,
-    pub label: String,
-    pub category: String,
-    pub description: Option<String>,
-    pub verified: Option<bool>,
-}
-
-#[derive(Debug, Clone, Queryable, Selectable, Serialize, Deserialize)]
-#[diesel(table_name = address_balances)]
-pub struct AddressBalance {
-    pub id: i32,
-    pub address: String,
-    pub balance: BigDecimal,
-    pub block_number: i64,
-    pub timestamp: DateTime<Utc>,
-    pub created_at: Option<DateTime<Utc>>,
-}
-
-#[derive(Debug, Insertable)]
-#[diesel(table_name = address_balances)]
-pub struct NewAddressBalance {
-    pub address: String,
-    pub balance: BigDecimal,
-    pub block_number: i64,
-    pub timestamp: DateTime<Utc>,
-}
 
 #[derive(Debug, Clone, Queryable, Selectable, Serialize, Deserialize)]
 #[diesel(table_name = address_stats)]
