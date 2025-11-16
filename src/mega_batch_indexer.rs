@@ -81,7 +81,7 @@ impl MegaBatchIndexer {
                 }
                 continue;
             }
-            let batch_size = std::cmp::min(1000, blocks_behind);
+            let batch_size = std::cmp::min(100, blocks_behind);
             let start_block = latest_db_block as u64 + 1;
             let end_block = start_block + batch_size - 1;
             
