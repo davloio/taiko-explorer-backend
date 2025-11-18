@@ -402,19 +402,14 @@ impl QueryResolver {
         // Try to get stats from materialized view first (fast)
         match self.block_repo.get_stats_from_materialized_view() {
             Ok(view_stats) => {
-                // Check if the view is fresh (less than 1 hour old)
-                let is_fresh = self.block_repo.is_stats_view_fresh().unwrap_or(false);
-                
-                if is_fresh {
-                    // Use fast materialized view data
-                    return Ok(ExplorerStats {
-                        total_blocks: view_stats.total_blocks,
-                        latest_block_number: view_stats.latest_block_number,
-                        total_transactions: view_stats.total_transactions,
-                        total_addresses: view_stats.total_unique_addresses,
-                        avg_block_time: 12.0,
-                    });
-                }
+                // Always use materialized view data (it refreshes automatically)
+                return Ok(ExplorerStats {
+                    total_blocks: view_stats.total_blocks,
+                    latest_block_number: view_stats.latest_block_number,
+                    total_transactions: view_stats.total_transactions,
+                    total_addresses: view_stats.total_unique_addresses,
+                    avg_block_time: 12.0,
+                });
             },
             Err(_) => {
                 // Materialized view doesn't exist yet, fall back to individual queries
