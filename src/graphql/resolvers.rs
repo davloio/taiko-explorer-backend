@@ -399,60 +399,18 @@ impl QueryResolver {
     }
 
      async fn stats(&self) -> Result<ExplorerStats> {
-        // Try to get stats from materialized view first (fast)
-        match self.block_repo.get_stats_from_materialized_view() {
-            Ok(view_stats) => {
-                // Always use materialized view data (it refreshes automatically)
-                return Ok(ExplorerStats {
-                    total_blocks: view_stats.total_blocks,
-                    latest_block_number: view_stats.latest_block_number,
-                    total_transactions: view_stats.total_transactions,
-                    total_addresses: view_stats.total_unique_addresses,
-                    avg_block_time: 12.0,
-                });
-            },
-            Err(_) => {
-                // Materialized view doesn't exist yet, fall back to individual queries
-            }
-        }
-
-        // Fallback to individual queries (slower but works if view doesn't exist)
-        let total_blocks = match self.block_repo.get_block_count() {
-            Ok(count) => count,
-            Err(e) => return Err(Error::new(format!("Database error: {}", e))),
+        // Get stats from materialized view (instant response)
+        let view_stats = match self.block_repo.get_stats_from_materialized_view() {
+            Ok(stats) => stats,
+            Err(e) => return Err(Error::new(format!("Materialized view error: {}", e))),
         };
-
-        let latest_block_number = match self.block_repo.get_latest_block_number() {
-            Ok(Some(number)) => number,
-            Ok(None) => 0,
-            Err(_) => 0,
-        };
-        
-        let total_transactions = match self.block_repo.get_transaction_count() {
-            Ok(count) => count,
-            Err(_) => 0,
-        };
-        
-        // Use fast address count method if address_stats table has data
-        let total_addresses = match self.block_repo.get_unique_address_count_fast() {
-            Ok(count) if count > 0 => count,
-            _ => {
-                // Fallback to slow method if needed
-                match self.block_repo.get_unique_address_count() {
-                    Ok(count) => count,
-                    Err(_) => 0,
-                }
-            }
-        };
-
-        let avg_block_time = 12.0;
 
         Ok(ExplorerStats {
-            total_blocks,
-            latest_block_number,
-            total_transactions,
-            total_addresses,
-            avg_block_time,
+            total_blocks: view_stats.total_blocks,
+            latest_block_number: view_stats.latest_block_number,
+            total_transactions: view_stats.total_transactions,
+            total_addresses: view_stats.total_unique_addresses,
+            avg_block_time: 12.0,
         })
     }
 
