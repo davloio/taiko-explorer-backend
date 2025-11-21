@@ -245,6 +245,33 @@ impl MegaBatchIndexer {
         info!("💾 BULK STORAGE COMPLETE in {:.2}s", store_duration.as_secs_f64());
         info!("📡 Skipping WebSocket broadcast for ultra-speed");
         
+        // Process analytics for address stats and bridge detection
+        info!("📊 ANALYTICS: Processing {} blocks for address stats and bridge detection", blocks.len());
+        let analytics_start = Instant::now();
+        let mut receipt_offset = 0;
+        for block in &blocks {
+            let block_number = block.number.unwrap().as_u64() as i64;
+            let block_timestamp = block.timestamp.as_u64() as i64;
+            let tx_count = block.transactions.len();
+            
+            // Extract receipts for this block
+            let block_receipts: Vec<Option<_>> = receipts[receipt_offset..receipt_offset + tx_count].to_vec();
+            receipt_offset += tx_count;
+            
+            if let Err(e) = process_block_analytics(
+                &self.analytics_repo,
+                &self.bridge_detector,
+                block_number,
+                block_timestamp,
+                &block.transactions,
+                &block_receipts,
+            ).await {
+                error!("Failed to process analytics for block {}: {}", block_number, e);
+            }
+        }
+        let analytics_duration = analytics_start.elapsed();
+        info!("✅ Address analytics processed in {:.2}s", analytics_duration.as_secs_f64());
+        
         Ok(blocks.len() as u64)
     }
     
@@ -543,7 +570,24 @@ impl MegaBatchIndexer {
             0
         };
         if !new_addresses.is_empty() {
-            info!("📊 ANALYTICS: Skipping analytics processing for {} addresses (implement later)", new_addresses.len());
+            info!("📊 ANALYTICS: Processing {} addresses for block analytics", new_addresses.len());
+            
+            // Process address analytics
+            let block_number = block.number.unwrap().as_u64() as i64;
+            let block_timestamp = block.timestamp.as_u64() as i64;
+            
+            if let Err(e) = process_block_analytics(
+                analytics_repo,
+                bridge_detector,
+                block_number,
+                block_timestamp,
+                &block.transactions,
+                receipts
+            ).await {
+                error!("Failed to process address analytics for block {}: {}", block_number, e);
+            } else {
+                info!("✅ Address analytics processed for block {}", block_number);
+            }
         }
         
         Ok(tx_count)
